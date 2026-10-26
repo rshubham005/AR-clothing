@@ -220,9 +220,11 @@ export function TryOn() {
           </div>
         )}
 
-        {running && status === 'searching' && (
+        {running && status !== 'tracking' && (
           <p role="status" className="absolute inset-x-4 bottom-4 rounded-md bg-obsidian/70 px-3 py-2 text-center text-sm text-chalk">
-            Step back so your shoulders are in view
+            {status === 'searching'
+              ? 'Step back so your shoulders are in view'
+              : 'For a better fit, prop your phone up and step back until your hips are in view'}
           </p>
         )}
 

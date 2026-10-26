@@ -8,7 +8,8 @@ import * as THREE from 'three'
 import { type Garment, TORSO } from './garment'
 import { OneEuro } from './oneEuro'
 
-export type TrackingStatus = 'searching' | 'tracking'
+/** 'close' = tracking, but the hips are out of view, so the garment's length and lean are guessed. */
+export type TrackingStatus = 'searching' | 'tracking' | 'close'
 
 /** MediaPipe pose landmark indices used by the garment fitter. */
 const LM = {
@@ -25,6 +26,11 @@ const LM = {
 } as const
 
 const MIN_VIS = 0.5
+const HIP_VIS = 0.3
+const CLOSE_AFTER_FRAMES = 60 // ~2 s without hips before suggesting to step back
+// The tracker gives shoulder JOINTS; a body is wider than that, most of all close to the camera. Draw the body of
+// the garment this much wider so it covers the body rather than sitting inside its outline.
+const EASE = 1.06
 const MAX_YAW = 1.1 // ~63°, past this the shoulder width estimate is too unreliable
 
 interface Point {
@@ -44,6 +50,7 @@ export class TryOnEngine {
   private view = { cw: 0, ch: 0, vw: 0, vh: 0 }
   private filters = new Map<string, OneEuro>()
   private status: TrackingStatus | null = null
+  private framesWithoutHips = 0
   /**
    * An invisible neck and head: it hides the parts of the garment behind them (the inside of the back collar)
    * while letting the camera image show through. Rig units, centred between the shoulders.
@@ -53,8 +60,10 @@ export class TryOnEngine {
       new THREE.CylinderGeometry(1, 1, 1, 24, 1, false),
       new THREE.MeshBasicMaterial({ colorWrite: false }),
     )
-    mesh.scale.set(0.14, 0.7, 0.13)
-    mesh.position.set(0, 0.35 - 0.05, 0)
+    // From inside the collar opening (y -0.15, where the inside of the back panel would show through) up to the chin.
+    // Its front (z 0.12) stays behind the garment front, its back hides the inside of the back panel.
+    mesh.scale.set(0.14, 0.7, 0.12)
+    mesh.position.set(0, 0.35 - 0.15, 0)
     mesh.renderOrder = -1 // fill the depth buffer before the garment draws
     return mesh
   })()
@@ -137,20 +146,22 @@ export class TryOnEngine {
 
     const ts = Math.max(performance.now(), this.lastTs + 1) // MediaPipe needs strictly increasing timestamps
     this.lastTs = ts
-    let ok = false
+    let fit: 'full' | 'partial' | false = false
     try {
       const res = this.tracker.detectForVideo(v, ts)
       const lm = res.landmarks[0]
-      ok = !!lm && this.fit(lm, res.worldLandmarks[0], ts / 1000)
+      fit = lm ? this.fit(lm, res.worldLandmarks[0], ts / 1000) : false
     } catch {
-      ok = false
+      fit = false
     }
-    if (!ok) {
+    if (!fit) {
       this.filters.forEach((f) => f.reset())
       this.head.visible = false
     }
-    this.garment.object.visible = ok
-    this.setStatus(ok ? 'tracking' : 'searching')
+    this.garment.object.visible = !!fit
+    this.framesWithoutHips = fit === 'partial' ? this.framesWithoutHips + 1 : 0
+    const close = this.framesWithoutHips > CLOSE_AFTER_FRAMES
+    this.setStatus(!fit ? 'searching' : close ? 'close' : 'tracking')
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -181,7 +192,7 @@ export class TryOnEngine {
   }
 
   /** Poses the garment's bones from the landmarks. Returns false when the upper body isn't usable. */
-  private fit(lm: NormalizedLandmark[], world: Landmark[] | undefined, t: number): boolean {
+  private fit(lm: NormalizedLandmark[], world: Landmark[] | undefined, t: number): 'full' | 'partial' | false {
     const g = this.garment!
     const { vw, vh } = this.view
     const get = (i: number): Point | null => {
@@ -210,7 +221,9 @@ export class TryOnEngine {
     const hR = get(LM.hipR)
     let waist: { x: number; y: number }
     let waistRoll = roll
-    if (hL && hR && hL.vis > MIN_VIS && hR.vis > MIN_VIS) {
+    // The tracker is rarely confident about hips (often ~0.5 even when they are in view), so accept less here.
+    const hipsSeen = !!hL && !!hR && hL.vis > HIP_VIS && hR.vis > HIP_VIS
+    if (hipsSeen) {
       waist = { x: (hL.x + hR.x) / 2, y: (hL.y + hR.y) / 2 }
       waistRoll = Math.atan2(hL.y - hR.y, hL.x - hR.x)
     } else {
@@ -225,10 +238,10 @@ export class TryOnEngine {
     const { chest, waist: waistBone } = g.bones
     chest.position.set(mid.x, mid.y, 0)
     chest.rotation.set(0, yaw, roll)
-    chest.scale.set(width, lengthScale, width)
+    chest.scale.set(width * EASE, lengthScale, width)
     waistBone.position.set(waist.x, waist.y, 0)
     waistBone.rotation.set(0, yaw, waistRoll)
-    waistBone.scale.set(width, lengthScale, width)
+    waistBone.scale.set(width * EASE, lengthScale, width)
 
     const arms = [
       { upper: g.bones.armL, fore: g.bones.foreArmL, shoulder: sL, elbow: get(LM.elbowL), wrist: get(LM.wristL), zSign: -1 },
@@ -266,7 +279,7 @@ export class TryOnEngine {
       const foreLen = seen(wrist) ? Math.hypot(wrist.x - elbowPos.x, wrist.y - elbowPos.y) : lengths.fore * width
       fore.scale.set(width, width * stretch(foreLen, lengths.fore * width), width)
     }
-    return true
+    return hipsSeen ? 'full' : 'partial'
   }
 
   /** Places the head occluder from the ears: centred just below them, about as wide as they are apart. */
