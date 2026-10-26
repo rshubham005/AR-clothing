@@ -1,0 +1,9 @@
+{
+  "input": "../../garments-src/hoodie/hoodie.obj",
+  "output": "../../public/garments/hoodie.glb",
+  "splitPieces": true,
+  "layers": 3,
+  "sleeves": ["piece_6", "piece_12"],
+  "targetTriangles": 26000,
+  "debugJoints": "../../garments-src/hoodie/joints.json"
+}

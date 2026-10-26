@@ -1,0 +1,9 @@
+{
+  "input": "../../garments-src/dress-shirt/shirt.obj",
+  "output": "../../public/garments/dress-shirt.glb",
+  "sleeves": ["Sleeve_Left", "Sleeve_Right"],
+  "drop": ["Bottons_Threads"],
+  "fixedMaterials": { "Bottons": "#ece8df" },
+  "targetTriangles": 24000,
+  "debugJoints": "../../garments-src/dress-shirt/joints.json"
+}

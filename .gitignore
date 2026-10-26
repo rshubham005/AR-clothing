@@ -1,0 +1,6 @@
+node_modules
+dist
+*.local
+.vercel
+public/mediapipe/wasm
+garments-src

@@ -1,0 +1,31 @@
+@import 'tailwindcss';
+
+/* Sanctus palette (from the original project, ADR-0023). */
+@theme {
+  --font-sans: 'Jost', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+
+  --color-canvas: #f3f0e9;
+  --color-surface: #faf8f3;
+  --color-subtle: #ece7dd;
+  --color-line: #d9d3c7;
+  --color-ink: #1d1c1a;
+  --color-ink-muted: #5a5148;
+  --color-ink-faint: #6e6559;
+  --color-obsidian: #1d1c1a;
+  --color-chalk: #f3f0e9;
+  --color-accent: #8a765c;
+  --color-accent-ink: #6e5c45;
+  --color-danger: #a8362a;
+  --color-danger-soft: #f8e5e2;
+  --color-warning: #8f5a0b;
+  --color-warning-soft: #f8eedc;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
